@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*,cover
+.hypothesis/
+.venv/
+venv/
+ENV/
+env/
+.ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+.logs
+
+# Environment
+.env
+.env.local
+.env.dev
+.env.test
+
+# Distribution
+dist/
+build/
+*.egg-info/
+.installed.cfg
+.tox/
+.coverage
+
+# Cache
+.cache/
+.pytest_cache/
+.hypothesis/
+cache/
+
+# Data
+*.csv
+*.gpx
+*.gpx~
+
+# Output directories
+output/
+
+# System
+.DS_Store
