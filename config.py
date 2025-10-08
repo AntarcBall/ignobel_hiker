@@ -12,9 +12,9 @@ GRID_SIZE = 100  # Size of elevation grid (GRID_SIZE x GRID_SIZE)
 HALF_SIZE_KM = 3.0  # Half size of area to fetch elevation data (in km)
 
 # Contour visualization settings
-CONTOUR_LEVEL_STEP = 5.0  # Elevation step between contour lines (in meters)
-CONTOUR_ALPHA = 0.6  # Transparency of contour lines
-CONTOUR_LINEWIDTH = 0.8  # Width of contour lines
+CONTOUR_LEVEL_STEP = 4.0  # Elevation step between contour lines (in meters)
+CONTOUR_ALPHA = 0.8  # Transparency of contour lines
+CONTOUR_LINEWIDTH = 0.2  # Width of contour lines
 
 # Caching settings
 ELEVATION_CACHE_ENABLED = True  # Whether to cache elevation data
@@ -24,6 +24,6 @@ ELEVATION_CACHE_DIR = "cache"  # Directory for storing cached elevation data
 VECTOR_SAMPLING_INTERVAL = 3  # Plot vector every N points
 VECTOR_SCALE_FACTOR = 5  # Scale factor for vector lengths to make them visible
 VECTOR_WIDTH = 0.003  # Width of the arrows
-VECTOR_COLOR = 'blue'  # Color of the vectors
+VECTOR_COLOR = 'black'  # Color of the vectors
 VECTOR_ALPHA = 0.7  # Transparency of the vectors
 MAX_VECTOR_DISPLAY = 20  # Maximum number of vectors to display to avoid overcrowding
