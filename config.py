@@ -21,8 +21,8 @@ ELEVATION_CACHE_ENABLED = True  # Whether to cache elevation data
 ELEVATION_CACHE_DIR = "cache"  # Directory for storing cached elevation data
 
 # Vector visualization settings
-VECTOR_SAMPLING_INTERVAL = 5  # Plot vector every N points
-VECTOR_SCALE_FACTOR = 10000  # Scale factor for vector lengths to make them visible
+VECTOR_SAMPLING_INTERVAL = 3  # Plot vector every N points
+VECTOR_SCALE_FACTOR = 5  # Scale factor for vector lengths to make them visible
 VECTOR_WIDTH = 0.003  # Width of the arrows
 VECTOR_COLOR = 'blue'  # Color of the vectors
 VECTOR_ALPHA = 0.7  # Transparency of the vectors
