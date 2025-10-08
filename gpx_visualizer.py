@@ -153,6 +153,108 @@ def plot_elevation_profile(gpx_points, title="Elevation Profile"):
     return fig, ax
 
 
+def calculate_vector_directions(gpx_points):
+    """
+    Calculate direction vectors between consecutive points in the GPX track
+    """
+    vectors = []
+    
+    for i in range(len(gpx_points) - 1):
+        p1 = gpx_points[i]
+        p2 = gpx_points[i + 1]
+        
+        # Calculate differences in lat and lon
+        delta_lat = p2['latitude'] - p1['latitude']
+        delta_lon = p2['longitude'] - p1['longitude']
+        
+        vectors.append({
+            'start_lat': p1['latitude'],
+            'start_lon': p1['longitude'],
+            'delta_lat': delta_lat,
+            'delta_lon': delta_lon
+        })
+    
+    return vectors
+
+
+def plot_gpx_with_vectors(gpx_points, title="GPX Track with Direction Vectors", sampling_interval=None, scale_factor=None):
+    """
+    Plot GPX track with arrow vectors showing direction at sampled points
+    """
+    from config import (VECTOR_SAMPLING_INTERVAL, VECTOR_SCALE_FACTOR, VECTOR_WIDTH, 
+                       VECTOR_COLOR, VECTOR_ALPHA, MAX_VECTOR_DISPLAY, 
+                       ZOOM_FACTOR_X, ZOOM_FACTOR_Y, AXIS_BUFFER)
+    
+    # Use provided values or fallback to config
+    sampling_interval = sampling_interval or VECTOR_SAMPLING_INTERVAL
+    scale_factor = scale_factor or VECTOR_SCALE_FACTOR
+    
+    fig, ax = plt.subplots(figsize=(12, 10))
+    
+    # Extract GPX coordinates for plotting
+    lats = [p['latitude'] for p in gpx_points]
+    lons = [p['longitude'] for p in gpx_points]
+    
+    # Plot the main GPX track
+    ax.plot(lons, lats, 'r-', linewidth=2, label='GPX Track', zorder=3)
+    ax.scatter(lons[0], lats[0], color='green', s=100, zorder=6, label='Start', edgecolors='black')  # Start point
+    ax.scatter(lons[-1], lats[-1], color='red', s=100, zorder=6, label='End', edgecolors='black')    # End point
+    
+    # Calculate direction vectors
+    vectors = calculate_vector_directions(gpx_points)
+    
+    # Determine which vectors to display based on sampling and max display limits
+    vector_count = len(vectors)
+    if vector_count > MAX_VECTOR_DISPLAY:
+        # Adjust sampling interval if there would be too many vectors
+        sampling_interval = max(sampling_interval, int(vector_count / MAX_VECTOR_DISPLAY))
+    
+    # Draw vectors at sampled points
+    for i in range(0, len(vectors), sampling_interval):
+        if i < len(vectors):  # Make sure we don't go out of bounds
+            vector = vectors[i]
+            
+            # Scale the vector to make it visible
+            scaled_delta_lat = vector['delta_lat'] * scale_factor
+            scaled_delta_lon = vector['delta_lon'] * scale_factor
+            
+            # Plot the vector as an arrow
+            ax.annotate('', 
+                       xy=(vector['start_lon'] + vector['delta_lon'], 
+                           vector['start_lat'] + vector['delta_lat']), 
+                       xytext=(vector['start_lon'], vector['start_lat']),
+                       arrowprops=dict(arrowstyle='->', 
+                                     color=VECTOR_COLOR, 
+                                     lw=VECTOR_WIDTH*10, 
+                                     alpha=VECTOR_ALPHA),
+                       zorder=4)
+    
+    # Calculate axis limits to magnify the view on the GPX path
+    lat_min, lat_max = min(lats), max(lats)
+    lon_min, lon_max = min(lons), max(lons)
+    
+    # Add buffer around the path
+    lat_center = (lat_min + lat_max) / 2
+    lon_center = (lon_min + lon_max) / 2
+    
+    # Use separate zoom factors for x and y axes
+    lat_range = (lat_max - lat_min) * ZOOM_FACTOR_Y
+    lon_range = (lon_max - lon_min) * ZOOM_FACTOR_X
+    
+    # Set axis limits to create a magnified view
+    ax.set_xlim(lon_center - lon_range/2 - AXIS_BUFFER, lon_center + lon_range/2 + AXIS_BUFFER)
+    ax.set_ylim(lat_center - lat_range/2 - AXIS_BUFFER, lat_center + lat_range/2 + AXIS_BUFFER)
+    
+    ax.set_title(title)
+    ax.set_xlabel('Longitude')
+    ax.set_ylabel('Latitude')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    return fig, ax
+
+
 def main():
     # Load API keys
     elevation_api_key, maps_api_key = load_api_keys()
@@ -194,9 +296,16 @@ def main():
     # Save the second figure
     fig2.savefig('output/elevation_profile.png', dpi=300, bbox_inches='tight')
     
+    # Plot GPX with direction vectors
+    fig3, ax3 = plot_gpx_with_vectors(gpx_points, title="GPX Track with Direction Vectors")
+    
+    # Save the third figure
+    fig3.savefig('output/gpx_vector_visualization.png', dpi=300, bbox_inches='tight')
+    
     print("Visualizations saved to output/ directory:")
     print("- gpx_contour_visualization.png")
     print("- elevation_profile.png")
+    print("- gpx_vector_visualization.png")
 
 
 if __name__ == "__main__":
