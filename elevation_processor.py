@@ -192,7 +192,9 @@ def plot_terrain_with_gpx(gpx_points, elevation_grid, LAT=None, LON=None, title=
     """
     Plot GPX track overlaid on elevation contours using techniques from the referenced repository
     """
-    from config import ZOOM_FACTOR_X, ZOOM_FACTOR_Y, AXIS_BUFFER, CONTOUR_LEVEL_STEP, CONTOUR_ALPHA, CONTOUR_LINEWIDTH  # Import config at function level to avoid circular imports
+    from config import (ZOOM_FACTOR_X, ZOOM_FACTOR_Y, AXIS_BUFFER, CONTOUR_LEVEL_STEP, 
+                       CONTOUR_ALPHA, CONTOUR_LINEWIDTH, SHOW_ELEVATION_BAR, 
+                       ELEVATION_BAR_POSITION, HIKER_PATH_THICKNESS, X_AXIS_RANGE_FACTOR)  # Import config at function level to avoid circular imports
     
     fig, ax = plt.subplots(figsize=(14, 10))
     
@@ -211,7 +213,17 @@ def plot_terrain_with_gpx(gpx_points, elevation_grid, LAT=None, LON=None, title=
         
         # Plot filled contours for better visualization
         contourf = ax.contourf(LON, LAT, elevation_grid, levels=contour_levels, cmap='terrain', alpha=CONTOUR_ALPHA)
-        cbar = plt.colorbar(contourf, ax=ax, label='Elevation (m)', shrink=0.8)
+        
+        # Add colorbar based on configuration
+        if SHOW_ELEVATION_BAR:
+            if ELEVATION_BAR_POSITION == 'left':
+                cbar = plt.colorbar(contourf, ax=ax, label='Elevation (m)', shrink=0.8, pad=0.15, location='left')
+            else:
+                # Default to right if not specified as left
+                cbar = plt.colorbar(contourf, ax=ax, label='Elevation (m)', shrink=0.8)
+        else:
+            # If not showing elevation bar, we still need to manage the layout appropriately
+            pass
         
         # Plot contour lines
         contour = ax.contour(LON, LAT, elevation_grid, levels=contour_levels, colors='black', alpha=CONTOUR_ALPHA, linewidths=CONTOUR_LINEWIDTH)
@@ -219,7 +231,11 @@ def plot_terrain_with_gpx(gpx_points, elevation_grid, LAT=None, LON=None, title=
     else:
         # If no coordinate grids, just plot a basic elevation map
         im = ax.imshow(elevation_grid, origin='lower', cmap='terrain', alpha=0.7)
-        plt.colorbar(im, ax=ax, label='Elevation (m)')
+        if SHOW_ELEVATION_BAR:
+            if ELEVATION_BAR_POSITION == 'left':
+                plt.colorbar(im, ax=ax, label='Elevation (m)', location='left')
+            else:
+                plt.colorbar(im, ax=ax, label='Elevation (m)')
     
     # Extract GPX coordinates for plotting
     lats = np.array([p['latitude'] for p in gpx_points])
@@ -229,9 +245,10 @@ def plot_terrain_with_gpx(gpx_points, elevation_grid, LAT=None, LON=None, title=
     if all(p['elevation'] is not None for p in gpx_points):
         elevations = [p['elevation'] for p in gpx_points]
         scatter = ax.scatter(lons, lats, c=elevations, cmap='viridis', s=8, zorder=5)
-        plt.colorbar(scatter, ax=ax, label='GPX Elevation (m)', shrink=0.8)
+        if SHOW_ELEVATION_BAR:
+            plt.colorbar(scatter, ax=ax, label='GPX Elevation (m)', shrink=0.8)
     else:
-        ax.plot(lons, lats, 'r-', linewidth=2, zorder=5)
+        ax.plot(lons, lats, 'r-', linewidth=HIKER_PATH_THICKNESS, zorder=5)  # Use configured thickness
     
     # Highlight start and end points
     ax.scatter(lons[0], lats[0], color='lime', s=150, zorder=6, label='Start', edgecolors='black', linewidth=1)  # Start point
@@ -248,6 +265,9 @@ def plot_terrain_with_gpx(gpx_points, elevation_grid, LAT=None, LON=None, title=
     # Use separate zoom factors for x and y axes
     lat_range = (lat_max - lat_min) * ZOOM_FACTOR_Y
     lon_range = (lon_max - lon_min) * ZOOM_FACTOR_X
+    
+    # Apply X-axis range factor configuration
+    lon_range = lon_range * X_AXIS_RANGE_FACTOR
     
     # Set axis limits to create a magnified view
     ax.set_xlim(lon_center - lon_range/2 - AXIS_BUFFER, lon_center + lon_range/2 + AXIS_BUFFER)
