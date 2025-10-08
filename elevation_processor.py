@@ -192,7 +192,7 @@ def plot_terrain_with_gpx(gpx_points, elevation_grid, LAT=None, LON=None, title=
     """
     Plot GPX track overlaid on elevation contours using techniques from the referenced repository
     """
-    from config import ZOOM_FACTOR, AXIS_BUFFER, CONTOUR_LEVEL_STEP, CONTOUR_ALPHA, CONTOUR_LINEWIDTH  # Import config at function level to avoid circular imports
+    from config import ZOOM_FACTOR_X, ZOOM_FACTOR_Y, AXIS_BUFFER, CONTOUR_LEVEL_STEP, CONTOUR_ALPHA, CONTOUR_LINEWIDTH  # Import config at function level to avoid circular imports
     
     fig, ax = plt.subplots(figsize=(14, 10))
     
@@ -245,8 +245,9 @@ def plot_terrain_with_gpx(gpx_points, elevation_grid, LAT=None, LON=None, title=
     lat_center = (lat_min + lat_max) / 2
     lon_center = (lon_min + lon_max) / 2
     
-    lat_range = (lat_max - lat_min) * ZOOM_FACTOR
-    lon_range = (lon_max - lon_min) * ZOOM_FACTOR
+    # Use separate zoom factors for x and y axes
+    lat_range = (lat_max - lat_min) * ZOOM_FACTOR_Y
+    lon_range = (lon_max - lon_min) * ZOOM_FACTOR_X
     
     # Set axis limits to create a magnified view
     ax.set_xlim(lon_center - lon_range/2 - AXIS_BUFFER, lon_center + lon_range/2 + AXIS_BUFFER)
