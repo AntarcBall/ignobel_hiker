@@ -14,11 +14,14 @@ import pickle
 from scipy.interpolate import griddata
 import math
 
+# Import 3D configuration
+from config_3d import *
+
 # Load environment variables
 load_dotenv()
 
-def get_gpx_bounds():
-    """Extract coordinate bounds from GPX files"""
+def get_gpx_tracks():
+    """Extract GPX tracks from GPX files"""
     gpx_dir = 'gpx_data'
     gpx_files = []
     
@@ -27,21 +30,40 @@ def get_gpx_bounds():
             if file.lower().endswith('.gpx'):
                 gpx_files.append(os.path.join(gpx_dir, file))
     
-    all_lats = []
-    all_lons = []
-    all_elevs = []
+    all_tracks = []
     
     for gpx_file in gpx_files:
         with open(gpx_file, 'r') as file:
             gpx = gpxpy.parse(file)
         
+        track_points = []
         for track in gpx.tracks:
             for segment in track.segments:
                 for point in segment.points:
-                    all_lats.append(point.latitude)
-                    all_lons.append(point.longitude)
-                    if point.elevation is not None:
-                        all_elevs.append(point.elevation)
+                    track_points.append({
+                        'latitude': point.latitude,
+                        'longitude': point.longitude,
+                        'elevation': point.elevation
+                    })
+        if track_points:
+            all_tracks.append(track_points)
+    
+    return all_tracks
+
+def get_gpx_bounds():
+    """Extract coordinate bounds from GPX files"""
+    gpx_tracks = get_gpx_tracks()
+    
+    all_lats = []
+    all_lons = []
+    all_elevs = []
+    
+    for track in gpx_tracks:
+        for point in track:
+            all_lats.append(point['latitude'])
+            all_lons.append(point['longitude'])
+            if point['elevation'] is not None:
+                all_elevs.append(point['elevation'])
     
     if not all_lats:
         raise ValueError("No coordinates found in GPX files")
@@ -137,16 +159,16 @@ def get_real_elevation_data_around_coords(lat, lon, api_key, size=140, half_size
         print(f"Error fetching real elevation data: {e}")
         raise
 
-def visualize_terrain_with_contours(Z, LAT, LON, vertical_exaggeration=2.0):
-    """Create 3D visualization with terrain surface and contour lines"""
-    fig = plt.figure(figsize=(15, 12))
+def visualize_terrain_with_contours_and_paths(Z, LAT, LON, gpx_tracks, vertical_exaggeration=VERTICAL_EXAGGERATION):
+    """Create 3D visualization with terrain surface, contour lines, and hiker paths"""
+    fig = plt.figure(figsize=FIGURE_SIZE_3D)
     ax = fig.add_subplot(111, projection='3d')
 
     # Apply vertical exaggeration
     Z_3d = Z * vertical_exaggeration
 
     # Plot the terrain surface
-    surf = ax.plot_surface(LON, LAT, Z_3d, cmap='terrain', alpha=0.8, 
+    surf = ax.plot_surface(LON, LAT, Z_3d, cmap=TERRAIN_COLORMAP, alpha=TERRAIN_ALPHA, 
                           linewidth=0, antialiased=True, shade=True)
 
     # Add contour lines projected at the bottom
@@ -155,17 +177,71 @@ def visualize_terrain_with_contours(Z, LAT, LON, vertical_exaggeration=2.0):
         ax.contour(LON, LAT, Z_3d, levels=[level], colors='black', 
                   alpha=0.4, linewidths=0.5, offset=np.min(Z_3d)-5)
 
+    # Plot hiker paths
+    for i, track in enumerate(gpx_tracks):
+        if len(track) == 0:
+            continue
+            
+        # Extract coordinates
+        lats = np.array([p['latitude'] for p in track])
+        lons = np.array([p['longitude'] for p in track])
+        elevs = np.array([p['elevation'] if p['elevation'] is not None else np.nanmedian(Z) for p in track])
+        
+        # Interpolate GPX elevations to terrain grid to get accurate heights at track locations
+        # We'll use the terrain elevation at the closest point and apply elevation bias
+        elevs_interp = []
+        for j, (lat, lon, gpx_elev) in enumerate(zip(lats, lons, elevs)):
+            # Find the closest grid point in the terrain
+            dist = (LAT - lat)**2 + (LON - lon)**2
+            idx = np.unravel_index(np.argmin(dist), dist.shape)
+            terrain_elev = Z[idx]  # Get terrain elevation at this location
+            
+            # Apply elevation bias to lift path above terrain for better visibility
+            elev_with_bias = terrain_elev + PATH_ELEVATION_BIAS
+            
+            elevs_interp.append(elev_with_bias * vertical_exaggeration)
+        
+        elevs_interp = np.array(elevs_interp)
+        
+        # Plot the path
+        color = PATH_3D_COLORS[i % len(PATH_3D_COLORS)]
+        ax.plot(lons, lats, elevs_interp, color=color, linewidth=PATH_3D_LINEWIDTH, 
+                label=f'Hiker {i+1}', zorder=10)
+        
+        # Add start and end markers if enabled
+        if SHOW_START_END_MARKERS:
+            # Apply bias to markers as well
+            start_idx = np.unravel_index(np.argmin((LAT - lats[0])**2 + (LON - lons[0])**2), Z.shape)
+            end_idx = np.unravel_index(np.argmin((LAT - lats[-1])**2 + (LON - lons[-1])**2), Z.shape)
+            start_elev = (Z[start_idx] + PATH_ELEVATION_BIAS) * vertical_exaggeration
+            end_elev = (Z[end_idx] + PATH_ELEVATION_BIAS) * vertical_exaggeration
+            
+            ax.scatter([lons[0]], [lats[0]], [start_elev], color=color, s=200, 
+                      marker='o', edgecolors='black', linewidth=2, zorder=11, label=f'Hiker {i+1} Start')
+            ax.scatter([lons[-1]], [lats[-1]], [end_elev], color=color, s=200, 
+                      marker='s', edgecolors='black', linewidth=2, zorder=11, label=f'Hiker {i+1} End')
+        
+        # Add ground projection if enabled
+        if SHOW_GROUND_PROJECTION:
+            z_ground = np.full_like(elevs_interp, np.min(Z_3d) - 10)
+            ax.plot(lons, lats, z_ground, color=color, 
+                   linestyle=PROJECTION_LINESTYLE, alpha=PROJECTION_ALPHA, 
+                   linewidth=PATH_3D_LINEWIDTH/2, zorder=1)
+
     # Set labels
     ax.set_xlabel('Longitude')
     ax.set_ylabel('Latitude')
     ax.set_zlabel('Elevation (m)')
-    ax.set_title('3D Visualization of Actual Terrain with Contour Lines')
+    ax.set_title('3D Visualization of Actual Terrain with Hiker Paths')
+
+    # Set viewing angle from config
+    ax.view_init(elev=VIEW_ELEVATION_ANGLE, azim=VIEW_AZIMUTH_ANGLE)
 
     # Add color bar
     fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5, label='Elevation (m)')
 
-    # Adjust view angle
-    ax.view_init(elev=20, azim=45)
+    # Add legend for hiker paths
+    ax.legend(loc='upper left', bbox_to_anchor=(0, 1))
 
     # Set pane properties for cleaner background
     ax.xaxis.pane.fill = False
@@ -207,13 +283,17 @@ def main():
         center_lat, center_lon, api_key, size=140
     )
     
-    print("Creating 3D visualization...")
-    fig, ax = visualize_terrain_with_contours(elevation_grid, LAT, LON)
+    # Get GPX tracks to overlay on terrain
+    gpx_tracks = get_gpx_tracks()
+    print(f"Found {len(gpx_tracks)} GPX tracks to display on terrain")
+    
+    print("Creating 3D visualization with hiker paths...")
+    fig, ax = visualize_terrain_with_contours_and_paths(elevation_grid, LAT, LON, gpx_tracks)
     
     # Save the visualization
     os.makedirs('output', exist_ok=True)
-    output_path = 'output/actual_terrain_with_contours.png'
-    fig.savefig(output_path, dpi=100, bbox_inches='tight')
+    output_path = 'output/actual_terrain_with_contours_and_paths.png'
+    fig.savefig(output_path, dpi=DPI_3D, bbox_inches='tight')
     print(f"Visualization saved to {output_path}")
     
     # Show the window

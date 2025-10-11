@@ -303,8 +303,12 @@ def plot_3d_terrain_matplotlib(elevation_grid, LAT, LON, all_gpx_points):
         color = hiker_colors[i % len(hiker_colors)]
         name = hiker_names[i] if i < len(hiker_names) else f'Hiker {i+1}'
         
+        # Use PATH_ELEVATION_BIAS to lift paths above terrain
+        path_offset = PATH_ELEVATION_BIAS
+        
         lons, lats, elevs = convert_gpx_to_3d(gpx_points, elevation_grid, 
-                                               LAT, LON, VERTICAL_EXAGGERATION)
+                                               LAT, LON, VERTICAL_EXAGGERATION,
+                                               offset=path_offset)
         
         # 3D 경로 선
         ax.plot(lons, lats, elevs, color=color, linewidth=PATH_3D_LINEWIDTH, 
@@ -416,9 +420,12 @@ def plot_3d_terrain_plotly(elevation_grid, LAT, LON, all_gpx_points):
         color = hiker_colors[i % len(hiker_colors)]
         name = hiker_names[i] if i < len(hiker_names) else f'Hiker {i+1}'
         
+        # Use PATH_ELEVATION_BIAS to lift paths above terrain
+        path_offset = PATH_ELEVATION_BIAS
+        
         lons, lats, elevs = convert_gpx_to_3d(gpx_points, elevation_grid, 
                                                LAT, LON, VERTICAL_EXAGGERATION, 
-                                               offset=5)  # 경로를 약간 띄움
+                                               offset=path_offset)
         
         # 3D 경로 선
         fig.add_trace(go.Scatter3d(
@@ -470,161 +477,6 @@ def plot_3d_terrain_plotly(elevation_grid, LAT, LON, all_gpx_points):
     )
     
     return fig
-
-def plot_3d_contour_only(elevation_grid, LAT, LON, vertical_exaggeration=2.0):
-    """
-    3D 등고선 시각화 (지형 표면 없이 등고선만)
-    
-    Parameters:
-    -----------
-    elevation_grid : np.ndarray
-        고도 데이터 (140x140)
-    LAT, LON : np.ndarray
-        위경도 메쉬그리드
-    vertical_exaggeration : float
-        고도 과장 비율
-    
-    Returns:
-    --------
-    fig, ax : matplotlib figure and axis
-    """
-    from config import CONTOUR_LEVEL_STEP  # Import from config to get step value
-    
-    fig = plt.figure(figsize=FIGURE_SIZE_3D)
-    ax = fig.add_subplot(111, projection='3d')
-    
-    # 지형 표면 생성 (고도 과장 적용)
-    X = LON
-    Y = LAT
-    Z = elevation_grid * vertical_exaggeration
-    
-    # 등고선 레벨 계산
-    min_elev = np.nanmin(elevation_grid)
-    max_elev = np.nanmax(elevation_grid)
-    
-    step = CONTOUR_LEVEL_STEP
-    contour_levels = np.arange(
-        np.floor(min_elev / step) * step,
-        np.ceil(max_elev / step) * step + step / 2.0,
-        step
-    )
-    
-    # 3D 등고선 그리기
-    for level in contour_levels:
-        # 해당 레벨의 등고선을 찾아 3D로 표시
-        contour = ax.contour(X, Y, Z, levels=[level * vertical_exaggeration], 
-                            colors='black', alpha=0.6, linewidths=0.8)
-    
-    # 뷰 각도 설정
-    ax.view_init(elev=VIEW_ELEVATION_ANGLE, azim=VIEW_AZIMUTH_ANGLE)
-    
-    # 축 레이블
-    ax.set_xlabel('Longitude')
-    ax.set_ylabel('Latitude')
-    ax.set_zlabel('Elevation (m)')
-    ax.set_title('3D Contour Lines Visualization')
-    
-    # 축의 배경색 및 그리드 설정
-    ax.xaxis.pane.fill = False
-    ax.yaxis.pane.fill = False
-    ax.zaxis.pane.fill = False
-    ax.xaxis.pane.set_edgecolor('w')
-    ax.yaxis.pane.set_edgecolor('w')
-    ax.zaxis.pane.set_edgecolor('w')
-    ax.xaxis.pane.set_alpha(0.1)
-    ax.yaxis.pane.set_alpha(0.1)
-    ax.zaxis.pane.set_alpha(0.1)
-    
-    plt.tight_layout()
-    return fig, ax
-
-def main_contour_only():
-    """등고선만 3D 시각화하는 메인 함수"""
-    try:
-        # API 키 로드
-        elevation_api_key, maps_api_key = load_api_keys()
-        
-        # GPX 파일 로드
-        gpx_files = get_gpx_files()
-        print(f"Found {len(gpx_files)} GPX files")
-        
-        if len(gpx_files) == 0:
-            print("No GPX files found in gpx_data directory. Creating sample GPX file...")
-            # Create a sample GPX file for testing
-            sample_gpx_content = """<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Sample GPX">
-  <trk>
-    <name>Sample Hike</name>
-    <trkseg>
-      <trkpt lat="37.7749" lon="-122.4194">
-        <ele>50</ele>
-      </trkpt>
-      <trkpt lat="37.7750" lon="-122.4190">
-        <ele>75</ele>
-      </trkpt>
-      <trkpt lat="37.7752" lon="-122.4185">
-        <ele>100</ele>
-      </trkpt>
-      <trkpt lat="37.7755" lon="-122.4180">
-        <ele>125</ele>
-      </trkpt>
-      <trkpt lat="37.7758" lon="-122.4175">
-        <ele>150</ele>
-      </trkpt>
-    </trkseg>
-  </trk>
-</gpx>"""
-            
-            os.makedirs('gpx_data', exist_ok=True)
-            with open('gpx_data/sample_hike.gpx', 'w') as f:
-                f.write(sample_gpx_content)
-            gpx_files = ['gpx_data/sample_hike.gpx']
-            print(f"Created sample GPX file: {gpx_files[0]}")
-        
-        # 모든 GPX 데이터 로드 (캐시 사용)
-        all_gpx_points = []
-        for gpx_file in gpx_files:
-            gpx_points = get_gpx_points_with_cache(gpx_file)
-            if gpx_points:  # Only add if parsed successfully
-                all_gpx_points.append(gpx_points)
-        
-        if not all_gpx_points:
-            print("No valid GPX data found in any files. Exiting.")
-            return
-        
-        # 중심 좌표 계산
-        all_lats = [p['latitude'] for gpx in all_gpx_points for p in gpx]
-        all_lons = [p['longitude'] for gpx in all_gpx_points for p in gpx]
-        center_lat = np.mean(all_lats)
-        center_lon = np.mean(all_lons)
-        
-        # Output 디렉토리 생성
-        os.makedirs('output', exist_ok=True)
-        
-        # 고도 데이터 가져오기 (기존 캐시된 데이터 사용)
-        print("Fetching elevation data...")
-        elevation_grid, LAT, LON = get_real_elevation_data_around_coords(
-            center_lat, center_lon, elevation_api_key, size=config.GRID_SIZE
-        )
-        
-        # 3D 등고선 시각화 생성
-        print("Creating 3D contour visualization...")
-        
-        fig, ax = plot_3d_contour_only(elevation_grid, LAT, LON, 
-                                       VERTICAL_EXAGGERATION)
-        output_path = 'output/terrain_3d_contours.png'
-        fig.savefig(output_path, dpi=DPI_3D, bbox_inches='tight')
-        print(f"3D contour visualization saved to {output_path}")
-        
-        plt.show()
-        
-    except KeyboardInterrupt:
-        print("\nOperation cancelled by user.")
-    except Exception as e:
-        print(f"An error occurred during execution: {e}")
-        import traceback
-        traceback.print_exc()
-
 
 def main():
     """3D 시각화 메인 함수"""
