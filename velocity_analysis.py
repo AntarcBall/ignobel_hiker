@@ -93,6 +93,75 @@ def parse_gpx_file(file_path):
     
     return track_points
 
+def synchronize_gpx_data(all_gpx_points):
+    """
+    Synchronize GPX data for all hikers by finding the common time range
+    and ensuring all hikers have data points within the same time window.
+    
+    Parameters:
+    all_gpx_points: List of lists, each containing GPX points for one hiker
+    
+    Returns:
+    synchronized_gpx_points: List of synchronized GPX point lists
+    """
+    if not all_gpx_points:
+        return []
+    
+    # Find the latest start time among all hikers
+    start_times = []
+    end_times = []
+    
+    for gpx_points in all_gpx_points:
+        if gpx_points:
+            start_times.append(gpx_points[0]['time'])
+            end_times.append(gpx_points[-1]['time'])
+    
+    if not start_times or not end_times:
+        return all_gpx_points
+    
+    # Use the latest start time and earliest end time as common window
+    common_start = max(start_times)
+    common_end = min(end_times)
+    
+    if common_start >= common_end:
+        # No common time window, return empty lists
+        return [[] for _ in all_gpx_points]
+    
+    # Filter each hiker's data to the common time window
+    synchronized_points = []
+    for gpx_points in all_gpx_points:
+        filtered_points = []
+        for point in gpx_points:
+            if common_start <= point['time'] <= common_end:
+                filtered_points.append(point)
+        synchronized_points.append(filtered_points)
+    
+    return synchronized_points
+
+def calculate_avg_time_interval(gpx_points):
+    """
+    Calculate the average time interval between consecutive data points.
+    
+    Parameters:
+    gpx_points: List of dictionaries with 'time' key
+    
+    Returns:
+    avg_interval: Average time interval in seconds
+    """
+    if len(gpx_points) < 2:
+        return 0
+    
+    intervals = []
+    for i in range(1, len(gpx_points)):
+        dt = (gpx_points[i]['time'] - gpx_points[i-1]['time']).total_seconds()
+        if dt > 0:  # Only consider positive intervals
+            intervals.append(dt)
+    
+    if intervals:
+        return sum(intervals) / len(intervals)
+    else:
+        return 0
+
 def get_gpx_files():
     """
     Get all GPX files in the gpx_data subdirectory
@@ -403,10 +472,55 @@ def calculate_leader_score(all_gpx_points):
     
     return leader_scores
 
+def calculate_total_time_elapsed(gpx_points):
+    """
+    Calculate total time elapsed from first to last point in the GPX data.
+    
+    Parameters:
+    gpx_points: List of dictionaries with 'latitude', 'longitude', 'elevation', 'time'
+    
+    Returns:
+    total_time: Total time elapsed in seconds
+    """
+    if not gpx_points or len(gpx_points) < 2:
+        return 0
+    
+    total_time = (gpx_points[-1]['time'] - gpx_points[0]['time']).total_seconds()
+    return total_time if total_time > 0 else 0
+
+def get_common_time_window(all_gpx_points):
+    """
+    Get the common time window from the synchronized data.
+    
+    Parameters:
+    all_gpx_points: List of lists, each containing GPX points for one hiker
+    
+    Returns:
+    common_start: The common start time
+    common_end: The common end time
+    """
+    if not all_gpx_points:
+        return None, None
+    
+    start_times = []
+    end_times = []
+    
+    for gpx_points in all_gpx_points:
+        if gpx_points:
+            start_times.append(gpx_points[0]['time'])
+            end_times.append(gpx_points[-1]['time'])
+    
+    if not start_times or not end_times:
+        return None, None
+    
+    common_start = max(start_times)
+    common_end = min(end_times)
+    
+    return common_start, common_end
+
 def calculate_comprehensive_score(tortuosity, stop_time_fraction, leader_score):
     """
-    Calculate a comprehensive weighted sum score.
-    Currently using equal weights (1:1:1) for all components.
+    Calculate a comprehensive weighted sum score using config weights.
     
     Parameters:
     tortuosity: Tortuosity score
@@ -416,13 +530,12 @@ def calculate_comprehensive_score(tortuosity, stop_time_fraction, leader_score):
     Returns:
     comprehensive_score: Weighted sum of all components
     """
-    # Normalize the scores (for now, we just sum them as equal weights)
-    # Note: This assumes all scores are in similar ranges or already normalized
+    # Use weights from config
+    w_tort = config_velocity.TORTUOSITY_WEIGHT
+    w_stop = config_velocity.STOP_FRACTION_WEIGHT
+    w_leader = config_velocity.LEADER_SCORE_WEIGHT
     
-    # Equal weights for now: 1:1:1
-    w1, w2, w3 = 1, 1, 1  # Weights for tortuosity, stop fraction, leader score
-    
-    comprehensive_score = w1 * tortuosity + w2 * stop_time_fraction + w3 * leader_score
+    comprehensive_score = w_tort * tortuosity + w_stop * stop_time_fraction + w_leader * leader_score
     
     return comprehensive_score
 
@@ -567,6 +680,24 @@ def main():
         print("No valid GPX data found")
         return
     
+    # Synchronize the GPX data to common time window
+    print("Synchronizing GPX data...")
+    synchronized_gpx_points = synchronize_gpx_data(all_gpx_points)
+    
+    # Recalculate velocity vectors for synchronized data
+    all_velocity_vectors = []
+    all_speeds = []
+    for i, gpx_points in enumerate(synchronized_gpx_points):
+        if len(gpx_points) > 0:
+            velocity_vectors, speeds = calculate_velocity_vectors(gpx_points)
+            all_velocity_vectors.append(velocity_vectors)
+            all_speeds.append(speeds)
+            print(f"Synchronized data for {hiker_names[i]}: {len(gpx_points)} points, {len(velocity_vectors)} velocity vectors")
+        else:
+            all_velocity_vectors.append([])
+            all_speeds.append([])
+            print(f"No synchronized data for {hiker_names[i]}")
+    
     # Calculate additional metrics
     print("\nCalculating additional metrics...")
     
@@ -575,19 +706,43 @@ def main():
     total_path_lengths = []
     straight_line_distances = []
     
-    for i, gpx_points in enumerate(all_gpx_points):
+    for i, gpx_points in enumerate(synchronized_gpx_points):
         tortuosity, total_length, straight_dist = calculate_tortuosity(gpx_points)
         tortuosities.append(tortuosity)
         total_path_lengths.append(total_length)
         straight_line_distances.append(straight_dist)
         print(f"{hiker_names[i]} - Tortuosity: {tortuosity:.3f}, Total path: {total_length:.2f}m, Straight-line: {straight_dist:.2f}m")
     
+    # Get common time window for all hikers
+    common_start, common_end = get_common_time_window(synchronized_gpx_points)
+    
+    if common_start and common_end:
+        common_time_elapsed = (common_end - common_start).total_seconds()
+        print(f"Common time window: {common_start} to {common_end} (Total: {common_time_elapsed:.2f}s)")
+        
+        # All hikers now have the same total time elapsed based on the common time window
+        total_times_elapsed = [common_time_elapsed] * len(hiker_names)
+    else:
+        # Fallback if no common window exists
+        total_times_elapsed = []
+        for i, gpx_points in enumerate(synchronized_gpx_points):
+            total_time = calculate_total_time_elapsed(gpx_points)
+            total_times_elapsed.append(total_time)
+        print("Warning: No common time window found, using individual time ranges")
+    
+    # Calculate average time interval between data points
+    avg_time_intervals = []
+    for i, gpx_points in enumerate(synchronized_gpx_points):
+        avg_interval = calculate_avg_time_interval(gpx_points)
+        avg_time_intervals.append(avg_interval)
+        print(f"{hiker_names[i]} - Average time interval: {avg_interval:.2f}s")
+    
     # Calculate stop metrics for each hiker
     stop_counts = []
     total_stop_times = []
     stop_time_fractions = []
     
-    for i, (gpx_points, velocity_vectors) in enumerate(zip(all_gpx_points, all_velocity_vectors)):
+    for i, (gpx_points, velocity_vectors) in enumerate(zip(synchronized_gpx_points, all_velocity_vectors)):
         stop_count, total_stop_time, stop_fraction = calculate_stop_metrics(gpx_points, velocity_vectors)
         stop_counts.append(stop_count)
         total_stop_times.append(total_stop_time)
@@ -596,9 +751,9 @@ def main():
     
     # Calculate leader scores (only if there are multiple hikers)
     leader_scores = [0] * len(hiker_names)  # Default to 0 if not enough hikers
-    if len(all_gpx_points) > 1:
+    if len(synchronized_gpx_points) > 1:
         print("\nCalculating leader scores...")
-        leader_scores = calculate_leader_score(all_gpx_points)
+        leader_scores = calculate_leader_score(synchronized_gpx_points)
         for i, leader_score in enumerate(leader_scores):
             print(f"{hiker_names[i]} - Leader score: {leader_score:.3f}")
     
@@ -691,10 +846,12 @@ def main():
     print("\n=== SUMMARY REPORT ===")
     for i, name in enumerate(hiker_names):
         print(f"\n{name}:")
-        print(f"  - Total points: {len(all_gpx_points[i])}")
+        print(f"  - Total points: {len(synchronized_gpx_points[i])}")
         print(f"  - Tortuosity: {tortuosities[i]:.3f}")
         print(f"  - Total path length: {total_path_lengths[i]:.2f}m")
         print(f"  - Straight-line distance: {straight_line_distances[i]:.2f}m")
+        print(f"  - Total time elapsed: {total_times_elapsed[i]:.2f}s")
+        print(f"  - Average time interval: {avg_time_intervals[i]:.2f}s")
         print(f"  - Stop count: {stop_counts[i]}")
         print(f"  - Total stop time: {total_stop_times[i]:.2f}s")
         print(f"  - Stop time fraction: {stop_time_fractions[i]:.3f}")
@@ -714,13 +871,16 @@ def main():
     # Prepare data for the transposed table
     # Rows will be metrics, columns will be hikers
     metrics = ['Total Points', 'Tortuosity', 'Path Length (m)', 'Straight Dist (m)', 
-               'Stop Count', 'Stop Time (s)', 'Stop Fraction', 'Leader Score', 'Comprehensive Score']
+               'Total Time Elapsed (s)', 'Avg Time Interval (s)', 'Stop Count', 'Stop Time (s)', 
+               'Stop Fraction', 'Leader Score', 'Comprehensive Score']
     
     cell_data = []
-    cell_data.append([f"{len(gpx_points)}" for gpx_points in all_gpx_points])  # Total Points
+    cell_data.append([f"{len(gpx_points)}" for gpx_points in synchronized_gpx_points])  # Total Points
     cell_data.append([f"{t:.3f}" for t in tortuosities])  # Tortuosity
     cell_data.append([f"{l:.2f}" for l in total_path_lengths])  # Path Length
     cell_data.append([f"{d:.2f}" for d in straight_line_distances])  # Straight Dist
+    cell_data.append([f"{t:.2f}" for t in total_times_elapsed])  # Total Time Elapsed
+    cell_data.append([f"{t:.2f}" for t in avg_time_intervals])  # Avg Time Interval
     cell_data.append([f"{c}" for c in stop_counts])  # Stop Count
     cell_data.append([f"{t:.2f}" for t in total_stop_times])  # Stop Time
     cell_data.append([f"{f:.3f}" for f in stop_time_fractions])  # Stop Fraction
@@ -737,8 +897,8 @@ def main():
     
     # Format the table
     table.auto_set_font_size(False)
-    table.set_fontsize(9)
-    table.scale(1.5, 2)  # Increase both width and height scaling
+    table.set_fontsize(7)  # Smaller font to fit the additional row
+    table.scale(1.5, 1.6)  # Adjust scaling
     
     # Color rows for better readability
     for i in range(len(metrics)):
@@ -763,6 +923,61 @@ def main():
     # Save the table
     fig.savefig('output/summary_table.png', dpi=300, bbox_inches='tight')
     print("- summary_table.png")
+    
+    # Create a separate sub-scores table to show the components of the comprehensive score
+    print("Creating sub-scores table...")
+    fig2, ax2 = plt.subplots(figsize=(10, 6))
+    
+    # Hide axes
+    ax2.axis('tight')
+    ax2.axis('off')
+    
+    # Subscore metrics (components of comprehensive score)
+    subscore_metrics = ['Tortuosity', 'Stop Fraction', 'Leader Score', 'Weight']
+    subscore_data = []
+    
+    # Data for each hiker
+    for i, name in enumerate(hiker_names):
+        row = [f"{tortuosities[i]:.3f}", f"{stop_time_fractions[i]:.3f}", f"{leader_scores[i]:.3f}",
+               f"T:{config_velocity.TORTUOSITY_WEIGHT},S:{config_velocity.STOP_FRACTION_WEIGHT},L:{config_velocity.LEADER_SCORE_WEIGHT}"]
+        subscore_data.append(row)
+    
+    # Create subscores table
+    subscore_table = ax2.table(cellText=subscore_data,
+                               rowLabels=hiker_names,
+                               colLabels=subscore_metrics,
+                               cellLoc='center',
+                               loc='center',
+                               bbox=[0, 0, 1, 1])
+    
+    # Format the subscores table
+    subscore_table.auto_set_font_size(False)
+    subscore_table.set_fontsize(9)
+    subscore_table.scale(1.2, 2)
+    
+    # Color alternate rows
+    for i in range(len(hiker_names)):
+        for j in range(len(subscore_metrics)):
+            if i % 2 == 0:  # Even rows (0-indexed)
+                subscore_table[(i + 1, j)].set_facecolor('#f8f8f8')  # Light gray for even rows
+            else:
+                subscore_table[(i + 1, j)].set_facecolor('#ffffff')  # White for odd rows
+    
+    # Bold header row (subscore metrics)
+    for j in range(len(subscore_metrics)):
+        subscore_table[(0, j)].set_text_props(weight='bold')
+        subscore_table[(0, j)].set_facecolor('#d0e0ff')  # Light blue for header
+    
+    # Bold header column (hiker names)
+    for i in range(len(hiker_names)):
+        subscore_table[(i + 1, -1)].set_text_props(weight='bold')
+        subscore_table[(i + 1, -1)].set_facecolor('#e0e0f0')  # Light purple for row labels
+    
+    ax2.set_title('Sub-scores for Comprehensive Score Calculation', fontsize=14, pad=20)
+    
+    # Save the subscores table
+    fig2.savefig('output/subscores_table.png', dpi=300, bbox_inches='tight')
+    print("- subscores_table.png")
     
     # Close all plots to free memory
     plt.close('all')
