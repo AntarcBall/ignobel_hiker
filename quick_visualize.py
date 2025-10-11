@@ -14,7 +14,7 @@ try:
 except:
     matplotlib.use('Agg')
 
-from visualize_actual_terrain import main
+from src.visualization.terrain_visualization_main import main
 
 if __name__ == "__main__":
     main()
