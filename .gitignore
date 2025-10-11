@@ -10,7 +10,7 @@ __pycache__/
 .pytest_cache/
 .coverage
 .coverage.*
-.cache
+# .cache
 nosetests.xml
 coverage.xml
 *.cover
@@ -55,10 +55,10 @@ build/
 .coverage
 
 # Cache
-.cache/
-.pytest_cache/
-.hypothesis/
-cache/
+# .cache/
+# .pytest_cache/
+# .hypothesis/
+# cache/
 
 # Data
 *.csv
