@@ -24,6 +24,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.colors import ListedColormap
 import math
 from datetime import datetime, timedelta
+import config_velocity
 
 def lla_to_enu(lat, lon, alt, lat_ref, lon_ref, alt_ref):
     """
@@ -72,8 +73,11 @@ def parse_gpx_file(file_path):
                 # Only include points after the specified start time (2025-10-07T22:12:12Z)
                 # Handle timezone-aware comparison
                 if point.time:
-                    # Create timezone-aware version of the start time if needed
-                    start_time = datetime(2025, 10, 7, 22, 12, 12)
+                    # Parse the start time from config
+                    filter_time_str = config_velocity.FILTER_START_TIME
+                    # Format: YYYY-MM-DDTHH:MM:SSZ
+                    start_time = datetime.strptime(filter_time_str, "%Y-%m-%dT%H:%M:%SZ")
+                    
                     if point.time.tzinfo is not None:
                         # If point.time is timezone-aware, make start_time timezone-aware too
                         from datetime import timezone
@@ -217,21 +221,22 @@ def calculate_tortuosity(gpx_points):
     
     return tortuosity, total_path_length, straight_line_distance
 
-def calculate_stop_metrics(gpx_points, velocity_vectors, min_speed_threshold=0.2, min_stop_duration=10):
+def calculate_stop_metrics(gpx_points, velocity_vectors):
     """
     Calculate stop-related metrics: stop count, total stop time, stop time fraction
     
     Parameters:
     gpx_points: List of dictionaries with 'latitude', 'longitude', 'elevation', 'time'
     velocity_vectors: List of (vx, vy, vz, dt) tuples
-    min_speed_threshold: Minimum speed to consider as stopped (m/s)
-    min_stop_duration: Minimum duration to consider as a stop (seconds)
     
     Returns:
     stop_count: Number of stops
     total_stop_time: Total time spent stopped (seconds)
     stop_time_fraction: Fraction of total time spent stopped
     """
+    min_speed_threshold = config_velocity.MIN_STOP_SPEED_THRESHOLD
+    min_stop_duration = config_velocity.MIN_STOP_DURATION
+    
     if len(velocity_vectors) == 0 or len(gpx_points) < 2:
         return 0, 0, 0
     
@@ -274,7 +279,7 @@ def calculate_stop_metrics(gpx_points, velocity_vectors, min_speed_threshold=0.2
     
     return stop_count, total_stop_time, stop_time_fraction
 
-def calculate_leader_score(all_gpx_points, time_interval=10):
+def calculate_leader_score(all_gpx_points):
     """
     Calculate leader score for multiple hikers based on who leads at different times.
     Uses linear interpolation to get synchronized positions at regular time intervals.
@@ -282,11 +287,12 @@ def calculate_leader_score(all_gpx_points, time_interval=10):
     
     Parameters:
     all_gpx_points: List of lists, each containing GPX points for one hiker
-    time_interval: Time interval in seconds for interpolation
     
     Returns:
     leader_scores: List of scores for each hiker
     """
+    time_interval = config_velocity.LEADER_TIME_INTERVAL
+    
     if len(all_gpx_points) < 2:
         return [0] * len(all_gpx_points)  # No comparison possible with less than 2 hikers
     
@@ -432,7 +438,7 @@ def create_velocity_histogram(hiker_velocities, hiker_speeds, hiker_names):
         print("No speed data available for plotting")
         return fig, ax
         
-    bins = np.linspace(0, max(all_speeds) * 1.1, 30)  # 30 bins
+    bins = np.linspace(0, max(all_speeds) * 1.1, config_velocity.VELOCITY_HISTOGRAM_BINS)
     
     # Get colors for different hikers
     colors = plt.cm.tab10(np.linspace(0, 1, len(hiker_names)))
@@ -698,35 +704,33 @@ def main():
     
     # Create summary table as PNG
     print("Creating summary table...")
-    fig, ax = plt.subplots(figsize=(12, len(hiker_names) * 0.8 + 2))
+    # Adjust figure size for transposed table
+    fig, ax = plt.subplots(figsize=(config_velocity.SUMMARY_TABLE_FIGURE_WIDTH, config_velocity.SUMMARY_TABLE_FIGURE_HEIGHT))
     
     # Hide axes
     ax.axis('tight')
     ax.axis('off')
     
-    # Prepare data for the table
-    columns = ['Hiker', 'Total Points', 'Tortuosity', 'Path Length (m)', 'Straight Dist (m)', 
+    # Prepare data for the transposed table
+    # Rows will be metrics, columns will be hikers
+    metrics = ['Total Points', 'Tortuosity', 'Path Length (m)', 'Straight Dist (m)', 
                'Stop Count', 'Stop Time (s)', 'Stop Fraction', 'Leader Score', 'Comprehensive Score']
     
     cell_data = []
-    for i, name in enumerate(hiker_names):
-        row = [
-            name,
-            f"{len(all_gpx_points[i])}",
-            f"{tortuosities[i]:.3f}",
-            f"{total_path_lengths[i]:.2f}",
-            f"{straight_line_distances[i]:.2f}",
-            f"{stop_counts[i]}",
-            f"{total_stop_times[i]:.2f}",
-            f"{stop_time_fractions[i]:.3f}",
-            f"{leader_scores[i]:.3f}",
-            f"{comprehensive_scores[i]:.3f}"
-        ]
-        cell_data.append(row)
+    cell_data.append([f"{len(gpx_points)}" for gpx_points in all_gpx_points])  # Total Points
+    cell_data.append([f"{t:.3f}" for t in tortuosities])  # Tortuosity
+    cell_data.append([f"{l:.2f}" for l in total_path_lengths])  # Path Length
+    cell_data.append([f"{d:.2f}" for d in straight_line_distances])  # Straight Dist
+    cell_data.append([f"{c}" for c in stop_counts])  # Stop Count
+    cell_data.append([f"{t:.2f}" for t in total_stop_times])  # Stop Time
+    cell_data.append([f"{f:.3f}" for f in stop_time_fractions])  # Stop Fraction
+    cell_data.append([f"{s:.3f}" for s in leader_scores])  # Leader Score
+    cell_data.append([f"{c:.3f}" for c in comprehensive_scores])  # Comprehensive Score
     
-    # Create table
+    # Create transposed table
     table = ax.table(cellText=cell_data,
-                     colLabels=columns,
+                     rowLabels=metrics,
+                     colLabels=hiker_names,
                      cellLoc='center',
                      loc='center',
                      bbox=[0, 0, 1, 1])
@@ -734,18 +738,25 @@ def main():
     # Format the table
     table.auto_set_font_size(False)
     table.set_fontsize(9)
-    table.scale(1.2, 2)
+    table.scale(1.5, 2)  # Increase both width and height scaling
     
-    # Color alternate rows
-    for i in range(len(cell_data)):
-        for j in range(len(columns)):
-            if i % 2 == 1:  # Odd rows (0-indexed)
-                table[(i + 1, j)].set_facecolor('#f0f0f0')  # Light gray
+    # Color rows for better readability
+    for i in range(len(metrics)):
+        for j in range(len(hiker_names)):
+            if i % 2 == 0:  # Even rows (0-indexed)
+                table[(i + 1, j)].set_facecolor('#f8f8f8')  # Light gray for even rows
+            else:
+                table[(i + 1, j)].set_facecolor('#ffffff')  # White for odd rows
     
-    # Bold header row
-    for j in range(len(columns)):
+    # Bold header row (hiker names)
+    for j in range(len(hiker_names)):
         table[(0, j)].set_text_props(weight='bold')
         table[(0, j)].set_facecolor('#d0e0ff')  # Light blue for header
+    
+    # Bold header column (metrics)
+    for i in range(len(metrics)):
+        table[(i + 1, -1)].set_text_props(weight='bold')
+        table[(i + 1, -1)].set_facecolor('#e0e0f0')  # Light purple for row labels
     
     ax.set_title('Hiking Metrics Summary Table', fontsize=16, pad=20)
     
