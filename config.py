@@ -8,8 +8,8 @@ ZOOM_FACTOR_Y = 1  # Separate zoom factor for y-axis (latitude)
 AXIS_BUFFER = 0.001  # Buffer around the path in decimal degrees
 
 # Elevation data settings
-GRID_SIZE = 140  # Size of elevation grid (GRID_SIZE x GRID_SIZE)
-HALF_SIZE_KM = 3.0  # Half size of area to fetch elevation data (in km)
+GRID_SIZE = 60  # Size of elevation grid (GRID_SIZE x GRID_SIZE) - Reduced for smaller 3D surface
+HALF_SIZE_KM = 1.0  # Half size of area to fetch elevation data (in km) - Reduced from 3.0 to 1.0
 
 # Contour visualization settings
 CONTOUR_LEVEL_STEP = 4.0  # Elevation step between contour lines (in meters)
