@@ -5,13 +5,47 @@ Module for processing GPX files - extracting coordinates, bounds, and track data
 import os
 import gpxpy
 import numpy as np
+import pickle
 from datetime import datetime, timezone
 from src.config.config_velocity import FILTER_START_TIME
 
 
+def get_cached_gpx_tracks():
+    """
+    Load GPX tracks from cache files when no GPX files are available
+    """
+    cache_dir = 'cache'
+    cached_tracks = []
+    
+    if os.path.exists(cache_dir):
+        import glob
+        cache_files = glob.glob(os.path.join(cache_dir, 'gpx_points_*.pkl'))
+        
+        for cache_file in cache_files:
+            try:
+                with open(cache_file, 'rb') as f:
+                    cached_data = pickle.load(f)
+                    # Ensure the cached data is in the correct format
+                    if isinstance(cached_data, list) and len(cached_data) > 0:
+                        # If it's already in the right format (list of tracks)
+                        if isinstance(cached_data[0], list) and len(cached_data[0]) > 0:
+                            # If the first element is a dict with required keys, it's good
+                            if (isinstance(cached_data[0][0], dict) and 
+                                'latitude' in cached_data[0][0] and 
+                                'longitude' in cached_data[0][0]):
+                                cached_tracks.extend(cached_data)
+                        # If it's a flat list of points, wrap it in a track
+                        elif isinstance(cached_data[0], dict) and 'latitude' in cached_data[0]:
+                            cached_tracks.append(cached_data)
+            except Exception as e:
+                print(f"Error loading cached GPX data from {cache_file}: {e}")
+    
+    return cached_tracks
+
+
 def get_gpx_tracks(apply_time_filter=False):
     """
-    Extract GPX tracks from GPX files
+    Extract GPX tracks from GPX files, or from cached data if no GPX files are available
     
     Parameters:
     apply_time_filter: If True, only include points after FILTER_START_TIME (2025-10-07T22:12:12Z)
@@ -23,6 +57,11 @@ def get_gpx_tracks(apply_time_filter=False):
         for file in os.listdir(gpx_dir):
             if file.lower().endswith('.gpx'):
                 gpx_files.append(os.path.join(gpx_dir, file))
+    
+    # If no GPX files found, try to load from cache
+    if not gpx_files:
+        print("No GPX files found in gpx_data directory, attempting to load from cache...")
+        return get_cached_gpx_tracks()
     
     all_tracks = []
     
@@ -65,7 +104,7 @@ def get_gpx_tracks(apply_time_filter=False):
 
 def get_gpx_bounds(apply_time_filter=False):
     """
-    Extract coordinate bounds from GPX files
+    Extract coordinate bounds from GPX files, or from cached data if no GPX files are available
     
     Parameters:
     apply_time_filter: If True, only include points after FILTER_START_TIME (2025-10-07T22:12:12Z)
