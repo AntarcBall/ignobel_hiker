@@ -7,6 +7,8 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
+import pickle
+import glob
 from src.data_processing.gpx_parser import parse_gpx_file, get_gpx_files
 from src.data_processing.data_synchronizer import synchronize_gpx_data, calculate_avg_time_interval
 from src.analysis.velocity_calculator import calculate_velocity_vectors
@@ -17,6 +19,31 @@ from src.analysis.score_calculator import calculate_comprehensive_score, calcula
 from src.visualization.velocity_visualizer import create_velocity_histogram, create_3d_velocity_scatter, create_velocity_projections
 
 
+def get_cached_gpx_for_velocity_analysis():
+    """
+    Load GPX tracks from cache files when no GPX files are available
+    """
+    cache_dir = 'cache'
+    cached_gpx_data = []
+    
+    if os.path.exists(cache_dir):
+        cache_files = glob.glob(os.path.join(cache_dir, 'gpx_points_*.pkl'))
+        
+        for cache_file in cache_files:
+            try:
+                with open(cache_file, 'rb') as f:
+                    cached_data = pickle.load(f)
+                    # Ensure the cached data is in the correct format
+                    if isinstance(cached_data, list) and len(cached_data) > 0:
+                        # If it's already in the right format (list of points)
+                        if isinstance(cached_data[0], dict) and 'latitude' in cached_data[0]:
+                            cached_gpx_data.append(cached_data)
+            except Exception as e:
+                print(f"Error loading cached GPX data from {cache_file}: {e}")
+    
+    return cached_gpx_data
+
+
 def main():
     print("Analyzing hiking velocity data...")
     
@@ -24,33 +51,49 @@ def main():
     gpx_files = get_gpx_files()
     print(f"Found {len(gpx_files)} GPX files: {gpx_files}")
     
+    # If no GPX files found, try to load from cache
     if not gpx_files:
-        print("No GPX files found in gpx_data directory")
-        return
+        print("No GPX files found in gpx_data directory, attempting to load from cache...")
+        all_gpx_points = get_cached_gpx_for_velocity_analysis()
+        if all_gpx_points:
+            print(f"Loaded {len(all_gpx_points)} cached GPX tracks")
+            # Process cached data instead of files
+            hiker_names = [f"H{i+1}" for i in range(len(all_gpx_points))]  # Generate generic names
+        else:
+            print("No GPX files found in gpx_data directory")
+            return
+    else:
+        # Process actual GPX files as before
+        all_gpx_points = []  # Store original points for tortuosity and stop calculations
+        hiker_names = []
+        
+        for i, gpx_file in enumerate(gpx_files):
+            print(f"Processing {gpx_file}...")
+            gpx_points = parse_gpx_file(gpx_file)
+            print(f"Loaded {len(gpx_points)} track points from {gpx_file} (filtered after 2025-10-07T22:12:12Z)")
+            
+            if len(gpx_points) > 0:
+                all_gpx_points.append(gpx_points)
+                hiker_names.append(os.path.basename(gpx_file).replace('.gpx', ''))
+        
+        if not all_gpx_points:
+            print("No valid GPX data found")
+            return
     
-    # Process each GPX file and extract velocity data
-    all_gpx_points = []  # Store original points for tortuosity and stop calculations
+    # Process each GPX file and extract velocity data (both file-based and cache-based)
     all_velocity_vectors = []
     all_speeds = []
-    hiker_names = []
     
-    for i, gpx_file in enumerate(gpx_files):
-        print(f"Processing {gpx_file}...")
-        gpx_points = parse_gpx_file(gpx_file)
-        print(f"Loaded {len(gpx_points)} track points from {gpx_file} (filtered after 2025-10-07T22:12:12Z)")
-        
+    for i, gpx_points in enumerate(all_gpx_points):
         if len(gpx_points) > 0:
             velocity_vectors, speeds = calculate_velocity_vectors(gpx_points)
-            print(f"Calculated {len(velocity_vectors)} velocity vectors for {gpx_file}")
+            print(f"Calculated {len(velocity_vectors)} velocity vectors for {hiker_names[i]}")
             
-            all_gpx_points.append(gpx_points)  # Store original points
             all_velocity_vectors.append(velocity_vectors)
             all_speeds.append(speeds)
-            hiker_names.append(os.path.basename(gpx_file).replace('.gpx', ''))
-    
-    if not all_gpx_points:
-        print("No valid GPX data found")
-        return
+        else:
+            all_velocity_vectors.append([])
+            all_speeds.append([])
     
     # Synchronize the GPX data to common time window
     print("Synchronizing GPX data...")
