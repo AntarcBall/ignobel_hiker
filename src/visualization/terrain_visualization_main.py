@@ -3,10 +3,12 @@
 Main module for terrain visualization functionality
 """
 import os
+import platform
 import matplotlib
-# Try to use TkAgg backend for GUI if available, otherwise Agg for file output
+
+# Try to use TkAgg backend for GUI if available (non-Linux) or if display is available (Linux), otherwise Agg for file output
 try:
-    if os.environ.get('DISPLAY'):
+    if platform.system() != 'Linux' or os.environ.get('DISPLAY'):
         matplotlib.use('TkAgg')
     else:
         matplotlib.use('Agg')

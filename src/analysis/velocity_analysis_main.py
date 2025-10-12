@@ -5,7 +5,23 @@ Main module for velocity analysis functionality
 import os
 import numpy as np
 import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend
+import platform
+# Use TkAgg backend for interactive plots on non-Linux systems
+if platform.system() != 'Linux':
+    try:
+        matplotlib.use('TkAgg')
+    except:
+        matplotlib.use('Agg')
+else:
+    # On Linux, check if DISPLAY is available for GUI support
+    import os
+    if os.environ.get('DISPLAY'):
+        try:
+            matplotlib.use('TkAgg')
+        except:
+            matplotlib.use('Agg')
+    else:
+        matplotlib.use('Agg')  # Use non-interactive backend when no display is available
 import matplotlib.pyplot as plt
 import pickle
 import glob
@@ -395,6 +411,15 @@ def main():
     # Save the subscores table
     fig2.savefig('output/subscores_table.png', dpi=300, bbox_inches='tight')
     print("- subscores_table.png")
+    
+    # Show plots if not on Linux or if display is available
+    import platform
+    import os
+    if platform.system() != 'Linux' or os.environ.get('DISPLAY'):
+        print("Showing visualizations...")
+        plt.show()
+    else:
+        print("Plots saved to output/ directory (non-interactive system)")
     
     # Close all plots to free memory
     plt.close('all')

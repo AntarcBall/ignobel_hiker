@@ -5,7 +5,23 @@ Module for velocity data visualizations
 import os
 import numpy as np
 import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend
+import platform
+# Use TkAgg backend for interactive plots on non-Linux systems
+if platform.system() != 'Linux':
+    try:
+        matplotlib.use('TkAgg')
+    except:
+        matplotlib.use('Agg')
+else:
+    # On Linux, check if DISPLAY is available for GUI support
+    import os
+    if os.environ.get('DISPLAY'):
+        try:
+            matplotlib.use('TkAgg')
+        except:
+            matplotlib.use('Agg')
+    else:
+        matplotlib.use('Agg')  # Use non-interactive backend when no display is available
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 

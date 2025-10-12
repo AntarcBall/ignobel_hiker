@@ -74,6 +74,16 @@ src/
 
 - `quick_visualize.py`: Entry point for terrain visualization
 - `run_velocity_analysis.py`: Entry point for velocity analysis
+- `tkinter-run.py`: GUI entry point for both visualization and analysis
+- `requirements.txt`: Project dependencies file
+
+## Installation
+
+Korean installation instructions:
+```
+pip install -r requirements.txt
+python tkinter-run.py
+```
 
 ## Benefits of This Structure
 
