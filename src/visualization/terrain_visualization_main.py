@@ -13,6 +13,7 @@ try:
 except:
     matplotlib.use('Agg')
 
+import matplotlib.pyplot as plt
 from dotenv import load_dotenv
 from src.data_processing.gpx_processor import get_gpx_bounds, get_gpx_tracks
 from src.api.elevation_api import get_real_elevation_data_around_coords
@@ -21,9 +22,10 @@ from src.visualization.terrain_visualizer import visualize_terrain_with_contours
 
 def main():
     print("Analyzing GPX files for coordinate ranges...")
-    bounds = get_gpx_bounds()
+    # Use filtered data (after 2025-10-07T22:12:12Z) for bounds calculation
+    bounds = get_gpx_bounds(apply_time_filter=True)
     
-    print(f"GPX coordinate ranges:")
+    print(f"GPX coordinate ranges (filtered after 2025-10-07T22:12:12Z):")
     print(f"  Latitude: {bounds['lat_min']:.6f} to {bounds['lat_max']:.6f}")
     print(f"  Longitude: {bounds['lon_min']:.6f} to {bounds['lon_max']:.6f}")
     if bounds['elev_min'] is not None:
@@ -46,9 +48,9 @@ def main():
         center_lat, center_lon, api_key, size=140
     )
     
-    # Get GPX tracks to overlay on terrain
-    gpx_tracks = get_gpx_tracks()
-    print(f"Found {len(gpx_tracks)} GPX tracks to display on terrain")
+    # Get filtered GPX tracks to overlay on terrain
+    gpx_tracks = get_gpx_tracks(apply_time_filter=True)
+    print(f"Found {len(gpx_tracks)} GPX tracks to display on terrain (filtered after 2025-10-07T22:12:12Z)")
     
     print("Creating 3D visualization with hiker paths...")
     fig, ax = visualize_terrain_with_contours_and_paths(elevation_grid, LAT, LON, gpx_tracks)
@@ -64,5 +66,4 @@ def main():
 
 
 if __name__ == "__main__":
-    import matplotlib.pyplot as plt
     main()

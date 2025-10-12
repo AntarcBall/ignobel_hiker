@@ -5,10 +5,17 @@ Module for processing GPX files - extracting coordinates, bounds, and track data
 import os
 import gpxpy
 import numpy as np
+from datetime import datetime, timezone
+from src.config.config_velocity import FILTER_START_TIME
 
 
-def get_gpx_tracks():
-    """Extract GPX tracks from GPX files"""
+def get_gpx_tracks(apply_time_filter=False):
+    """
+    Extract GPX tracks from GPX files
+    
+    Parameters:
+    apply_time_filter: If True, only include points after FILTER_START_TIME (2025-10-07T22:12:12Z)
+    """
     gpx_dir = 'gpx_data'
     gpx_files = []
     
@@ -19,6 +26,13 @@ def get_gpx_tracks():
     
     all_tracks = []
     
+    # Parse the start time from config if filtering is enabled
+    start_time = None
+    if apply_time_filter:
+        filter_time_str = FILTER_START_TIME
+        start_time = datetime.strptime(filter_time_str, "%Y-%m-%dT%H:%M:%SZ")
+        start_time = start_time.replace(tzinfo=timezone.utc)
+    
     for gpx_file in gpx_files:
         with open(gpx_file, 'r') as file:
             gpx = gpxpy.parse(file)
@@ -27,6 +41,17 @@ def get_gpx_tracks():
         for track in gpx.tracks:
             for segment in track.segments:
                 for point in segment.points:
+                    # Apply time filter if enabled
+                    if apply_time_filter and point.time:
+                        # Make point.time timezone-aware if needed
+                        point_time = point.time
+                        if point_time.tzinfo is None:
+                            point_time = point_time.replace(tzinfo=timezone.utc)
+                        
+                        # Skip points before the start time
+                        if point_time < start_time:
+                            continue
+                    
                     track_points.append({
                         'latitude': point.latitude,
                         'longitude': point.longitude,
@@ -38,9 +63,14 @@ def get_gpx_tracks():
     return all_tracks
 
 
-def get_gpx_bounds():
-    """Extract coordinate bounds from GPX files"""
-    gpx_tracks = get_gpx_tracks()
+def get_gpx_bounds(apply_time_filter=False):
+    """
+    Extract coordinate bounds from GPX files
+    
+    Parameters:
+    apply_time_filter: If True, only include points after FILTER_START_TIME (2025-10-07T22:12:12Z)
+    """
+    gpx_tracks = get_gpx_tracks(apply_time_filter=apply_time_filter)
     
     all_lats = []
     all_lons = []
