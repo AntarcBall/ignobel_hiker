@@ -16,7 +16,7 @@ except:
 import matplotlib.pyplot as plt
 from dotenv import load_dotenv
 from src.data_processing.gpx_processor import get_gpx_bounds, get_gpx_tracks
-from src.api.elevation_api import get_real_elevation_data_around_coords
+from src.api.elevation_api import get_real_elevation_data_around_coords, get_cache_filename
 from src.visualization.terrain_visualizer import visualize_terrain_with_contours_and_paths
 
 
@@ -37,16 +37,31 @@ def main():
     
     print(f"\nCenter coordinates: {center_lat:.6f}, {center_lon:.6f}")
     
-    # Load API key from environment
+    # Attempt to load API key from environment
     load_dotenv()
     api_key = os.getenv('GOOGLE_ELEVATION_API_KEY') or os.getenv('ELEVATION_API_KEY')
-    if not api_key or api_key == "YOUR_ELEVATION_API_KEY_HERE":
-        raise ValueError("Please set a valid ELEVATION_API_KEY in .env file")
     
-    print("Fetching real elevation data...")
-    elevation_grid, LAT, LON = get_real_elevation_data_around_coords(
-        center_lat, center_lon, api_key, size=140
-    )
+    # Check if cached elevation data exists first
+    cache_file = get_cache_filename(center_lat, center_lon, size=140, half_size_km=3.0)
+    
+    if os.path.exists(cache_file):
+        print(f"Using cached elevation data from {cache_file}")
+        # Import here to avoid circular imports when loading cached data
+        import pickle
+        with open(cache_file, 'rb') as f:
+            data = pickle.load(f)
+        elevation_grid, LAT, LON = data['Z'], data['LAT'], data['LON']
+        print(f"Loaded cached elevation data: {elevation_grid.shape}")
+    else:
+        # Only require API key if no cached data exists
+        if not api_key or api_key == "YOUR_ELEVATION_API_KEY_HERE":
+            raise ValueError("No cached elevation data found and no valid ELEVATION_API_KEY in .env file. "
+                           "Please either set a valid API key or ensure elevation data is cached.")
+        
+        print("Fetching real elevation data...")
+        elevation_grid, LAT, LON = get_real_elevation_data_around_coords(
+            center_lat, center_lon, api_key, size=140
+        )
     
     # Get filtered GPX tracks to overlay on terrain
     gpx_tracks = get_gpx_tracks(apply_time_filter=True)
